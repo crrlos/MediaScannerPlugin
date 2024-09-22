@@ -1,15 +1,21 @@
 package br.com.brunogrossi.MediaScannerPlugin;
 
+
+import static androidx.core.content.ContentProviderCompat.requireContext;
+
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
 
 import org.json.JSONArray;
 import org.json.JSONException;
-import org.json.JSONObject;
 
-import android.content.Intent;
-import android.net.Uri;
-import android.util.Log;
+import android.media.MediaScannerConnection;
+import android.os.Environment;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 
 /*
 The MIT License (MIT)
@@ -44,34 +50,39 @@ SOFTWARE.
 public class MediaScannerPlugin extends CordovaPlugin {
     private static final String TAG = "MediaScannerPlugin";
 
+    private void copyFile(File sourceFile, File destinationFile) throws IOException {
+        try (FileInputStream inputStream = new FileInputStream(sourceFile);
+             FileOutputStream outputStream = new FileOutputStream(destinationFile)) {
+            byte[] buffer = new byte[1024];
+            int length;
+            while ((length = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, length);
+            }
+        }
+    }
+
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         try {
-            if (action.equals("scanFile")) {
-                String fileUri = args.optString(0);
-                if(fileUri!=null && !fileUri.equals("")) {
-                    Uri contentUri = Uri.parse(fileUri);
-                    
-                    Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-                    mediaScanIntent.setData(contentUri);
-                    this.cordova.getActivity().sendBroadcast(mediaScanIntent);
-                    
-                    callbackContext.success();
-        
-                    return true;
-                } else {
-                    Log.w(TAG, "No action param provided: "+action);
-                    callbackContext.error("No action param provided: "+action);
-                    return false;
-                }
-            } else {
-                Log.w(TAG, "Wrong action was provided: "+action);
-                return false;
+            String fileUri = args.optString(0);
+            String source = fileUri.replace("file://", "");
+            String fileName = source.split("/")[source.split("/").length - 1];
+            String destinationPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toString() + "/" + fileName;
+            File destinationFile = new File(destinationPath);
+            File sourceFile = new File(source);
+            try {
+                copyFile(sourceFile, destinationFile);
+            } catch (IOException e) {
+                callbackContext.error("No se pudo copiar imagen a destino");
             }
+            MediaScannerConnection.scanFile(cordova.getContext(), new String[]{destinationFile.getAbsolutePath()}, null, null);
+            callbackContext.success();
+            return true;
         } catch (RuntimeException e) {
             e.printStackTrace();
             callbackContext.error(e.getMessage());
             return false;
         }
     }
+
 }
